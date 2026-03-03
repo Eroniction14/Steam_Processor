@@ -21,36 +21,54 @@ Modern distributed systems at companies like Amazon, Netflix, and Airbnb rely on
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Docker Compose                           │
-│                                                                 │
-│  ┌───────────┐   ┌────────────────────────────────────────┐    │
-│  │  Kafka +   │   │         Stream Processor (Go)          │    │
-│  │ Zookeeper  │◀─▶│                                        │    │
-│  │            │   │  ┌────────────┐  ┌──────────────────┐  │    │
-│  │  Topics:   │   │  │ Consumer   │  │ Pipeline         │  │    │
-│  │  - input   │   │  │ Group      │──│  ├─ Deserializer │  │    │
-│  │  - output  │   │  │ Manager    │  │  ├─ Router       │  │    │
-│  │  - dlq     │   │  └────────────┘  │  ├─ Enricher     │  │    │
-│  └───────────┘   │                   │  ├─ Aggregator   │  │    │
-│                   │  ┌────────────┐  │  └─ Emitter      │  │    │
-│  ┌───────────┐   │  │ State      │  └──────────────────┘  │    │
-│  │Prometheus │◀──│  │ Store      │                        │    │
-│  └───────────┘   │  └────────────┘  ┌──────────────────┐  │    │
-│       │          │                   │ Metrics / Health  │  │    │
-│  ┌───────────┐   │  ┌────────────┐  │ HTTP Server       │  │    │
-│  │ Grafana   │   │  │ DLQ        │  └──────────────────┘  │    │
-│  └───────────┘   │  │ Handler    │                        │    │
-│                   │  └────────────┘                        │    │
-│                   └────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+graph LR
+    subgraph Kafka
+        IT[user-events]
+        OT[aggregated-stats]
+        DLQ[dead-letter]
+    end
+
+    subgraph Stream Processor
+        C[Consumer Group] --> D[Deserializer]
+        D --> R[Router]
+        R --> E[Enricher]
+        E --> A[Aggregator]
+        A --> S[Kafka Sink]
+        C -- poison msgs --> DLQ
+        SS[(State Store)] -.-> E
+    end
+
+    subgraph Observability
+        P[Prometheus]
+        G[Grafana]
+        H[Health Endpoints]
+    end
+
+    IT --> C
+    S --> OT
+    Stream Processor -. /metrics .-> P
+    P --> G
+    Stream Processor -. /healthz /readyz .-> H
 ```
 
 ### Processing Pipeline
 
-```
-Event → Deserialize → Route → Enrich → Aggregate → Emit
+```mermaid
+graph LR
+    Event([Event]) --> DE[Deserialize]
+    DE --> RO[Route]
+    RO --> EN[Enrich]
+    EN --> AG[Aggregate]
+    AG --> EM[Emit]
+    
+    RO -- filtered --> X([Dropped])
+    DE -- invalid --> DLQ([Dead Letter Queue])
+
+    style Event fill:#4CAF50,color:#fff
+    style EM fill:#2196F3,color:#fff
+    style DLQ fill:#f44336,color:#fff
+    style X fill:#757575,color:#fff
 ```
 
 Each stage implements the `Stage` interface, making the pipeline fully composable and testable.

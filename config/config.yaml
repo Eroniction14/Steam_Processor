@@ -1,0 +1,22 @@
+kafka:
+  brokers:
+    - "kafka:29092"
+  consumer_group: "stream-processor"
+  input_topics:
+    - "user-events"
+  output_topic: "aggregated-stats"
+  dlq_topic: "dead-letter"
+  max_retries: 3
+  retry_backoff: 100ms
+
+pipeline:
+  window_size: 1m
+  flush_interval: 10s
+  batch_size: 100
+  workers: 4
+
+metrics:
+  port: 9090
+
+health:
+  port: 8081

@@ -21,40 +21,22 @@ Modern distributed systems at companies like Amazon, Netflix, and Airbnb rely on
 
 ## Architecture
 
-```
-+-------------------------------------------------------------------+
-|                         Docker Compose                            |
-|                                                                   |
-|  +-------------+   +------------------------------------------+  |
-|  | Kafka +     |   |        Stream Processor (Go)              |  |
-|  | Zookeeper   |<->|                                          |  |
-|  |             |   |  +-------------+  +--------------------+  |  |
-|  | Topics:     |   |  | Consumer    |  | Pipeline           |  |  |
-|  |  - input    |   |  | Group       |--| - Deserializer     |  |  |
-|  |  - output   |   |  | Manager     |  | - Router           |  |  |
-|  |  - dlq      |   |  +-------------+  | - Enricher         |  |  |
-|  +-------------+   |                    | - Aggregator       |  |  |
-|                     |  +-------------+  | - Emitter          |  |  |
-|  +-------------+   |  | State       |  +--------------------+  |  |
-|  | Prometheus  |<--|  | Store       |                          |  |
-|  +-------------+   |  +-------------+  +--------------------+  |  |
-|        |            |                   | Metrics / Health    |  |  |
-|  +-------------+   |  +-------------+  | HTTP Server         |  |  |
-|  | Grafana     |   |  | DLQ         |  +--------------------+  |  |
-|  +-------------+   |  | Handler     |                          |  |
-|                     |  +-------------+                          |  |
-|                     +------------------------------------------+  |
-+-------------------------------------------------------------------+
-```
+**Components:**
+- **Kafka** — Input topic (`user-events`), output topic (`aggregated-stats`), dead-letter topic (`dead-letter`)
+- **Consumer Group** — Reads from Kafka with retry + exponential backoff
+- **Pipeline** — Deserializer → Router → Enricher → Aggregator → Kafka Sink
+- **State Store** — Thread-safe in-memory store for enrichment lookups
+- **DLQ Handler** — Routes poison messages to dead-letter topic with error metadata
+- **Observability** — Prometheus metrics, Grafana dashboards, health/readiness endpoints
 
 ### Processing Pipeline
 
 ```
 Event --> Deserialize --> Route --> Enrich --> Aggregate --> Emit
-                           |
-                           +--> [filtered: dropped]
-           |
-           +--> [invalid: Dead Letter Queue]
+                           |                                  |
+                      [filtered]                    [output topic]
+            |
+       [invalid: DLQ]
 ```
 
 Each stage implements the `Stage` interface, making the pipeline fully composable and testable.

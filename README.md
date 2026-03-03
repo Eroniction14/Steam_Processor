@@ -21,51 +21,40 @@ Modern distributed systems at companies like Amazon, Netflix, and Airbnb rely on
 
 ## Architecture
 
-```mermaid
-graph LR
-    subgraph Kafka
-        IT[user-events]
-        OT[aggregated-stats]
-        DLQ[dead-letter]
-    end
-
-    subgraph Processor
-        C[Consumer Group] --> D[Deserializer]
-        D --> R[Router]
-        R --> EN[Enricher]
-        EN --> A[Aggregator]
-        A --> S[Kafka Sink]
-        C -- poison msgs --> DLQ
-        SS[(State Store)] -.-> EN
-    end
-
-    subgraph Observability
-        P[Prometheus]
-        G[Grafana]
-        H[Health Endpoints]
-    end
-
-    IT --> C
-    S --> OT
-    P --> G
+```
++-------------------------------------------------------------------+
+|                         Docker Compose                            |
+|                                                                   |
+|  +-------------+   +------------------------------------------+  |
+|  | Kafka +     |   |        Stream Processor (Go)              |  |
+|  | Zookeeper   |<->|                                          |  |
+|  |             |   |  +-------------+  +--------------------+  |  |
+|  | Topics:     |   |  | Consumer    |  | Pipeline           |  |  |
+|  |  - input    |   |  | Group       |--| - Deserializer     |  |  |
+|  |  - output   |   |  | Manager     |  | - Router           |  |  |
+|  |  - dlq      |   |  +-------------+  | - Enricher         |  |  |
+|  +-------------+   |                    | - Aggregator       |  |  |
+|                     |  +-------------+  | - Emitter          |  |  |
+|  +-------------+   |  | State       |  +--------------------+  |  |
+|  | Prometheus  |<--|  | Store       |                          |  |
+|  +-------------+   |  +-------------+  +--------------------+  |  |
+|        |            |                   | Metrics / Health    |  |  |
+|  +-------------+   |  +-------------+  | HTTP Server         |  |  |
+|  | Grafana     |   |  | DLQ         |  +--------------------+  |  |
+|  +-------------+   |  | Handler     |                          |  |
+|                     |  +-------------+                          |  |
+|                     +------------------------------------------+  |
++-------------------------------------------------------------------+
 ```
 
 ### Processing Pipeline
 
-```mermaid
-graph LR
-    EV([Event]) --> DE[Deserialize]
-    DE --> RO[Route]
-    RO --> ENR[Enrich]
-    ENR --> AG[Aggregate]
-    AG --> EM[Emit]
-    RO -- filtered --> X([Dropped])
-    DE -- invalid --> DQ([Dead Letter Queue])
-
-    style EV fill:#4CAF50,color:#fff
-    style EM fill:#2196F3,color:#fff
-    style DQ fill:#f44336,color:#fff
-    style X fill:#757575,color:#fff
+```
+Event --> Deserialize --> Route --> Enrich --> Aggregate --> Emit
+                           |
+                           +--> [filtered: dropped]
+           |
+           +--> [invalid: Dead Letter Queue]
 ```
 
 Each stage implements the `Stage` interface, making the pipeline fully composable and testable.

@@ -29,14 +29,14 @@ graph LR
         DLQ[dead-letter]
     end
 
-    subgraph Stream Processor
+    subgraph Processor
         C[Consumer Group] --> D[Deserializer]
         D --> R[Router]
-        R --> E[Enricher]
-        E --> A[Aggregator]
+        R --> EN[Enricher]
+        EN --> A[Aggregator]
         A --> S[Kafka Sink]
         C -- poison msgs --> DLQ
-        SS[(State Store)] -.-> E
+        SS[(State Store)] -.-> EN
     end
 
     subgraph Observability
@@ -47,27 +47,24 @@ graph LR
 
     IT --> C
     S --> OT
-    Stream Processor -. /metrics .-> P
     P --> G
-    Stream Processor -. /healthz /readyz .-> H
 ```
 
 ### Processing Pipeline
 
 ```mermaid
 graph LR
-    Event([Event]) --> DE[Deserialize]
+    EV([Event]) --> DE[Deserialize]
     DE --> RO[Route]
-    RO --> EN[Enrich]
-    EN --> AG[Aggregate]
+    RO --> ENR[Enrich]
+    ENR --> AG[Aggregate]
     AG --> EM[Emit]
-    
     RO -- filtered --> X([Dropped])
-    DE -- invalid --> DLQ([Dead Letter Queue])
+    DE -- invalid --> DQ([Dead Letter Queue])
 
-    style Event fill:#4CAF50,color:#fff
+    style EV fill:#4CAF50,color:#fff
     style EM fill:#2196F3,color:#fff
-    style DLQ fill:#f44336,color:#fff
+    style DQ fill:#f44336,color:#fff
     style X fill:#757575,color:#fff
 ```
 
